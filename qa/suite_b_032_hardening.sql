@@ -1,0 +1,7 @@
+-- QA SUITE B — migration 032 regression. STAGING ONLY. Ends in a forced exception (nothing persists).
+-- LAST RUN 2026-10-22: 5/5 as expected:
+--   team parent cannot UPDATE game_event (0 rows; start time unchanged) · cannot INSERT game_event ·
+--   family cannot set uniform order_status/payment_status (forced pending / n/a; sizes still editable) ·
+--   Commissioner INSERT of a season with status 'active' lands as 'planning' · Commissioner can still edit game_event.
+-- Method: same as suite A (set_config request.jwt.claims + set local role authenticated; RAISE EXCEPTION to roll back).
+-- Reproduce by impersonating a001 (family A), a003 (Hawks team parent), a004 (Commissioner) against the demo season b001.

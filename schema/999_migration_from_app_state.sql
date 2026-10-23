@@ -1,0 +1,90 @@
+-- ============================================================
+-- 999_migration_from_app_state.sql
+-- SAFE, ADDITIVE, NON-DESTRUCTIVE migration helper.
+--
+-- WHAT THIS DOES:
+--   Reads the existing `app_state` blob (fremont-league-v1) and
+--   inserts corresponding rows into the new relational schema.
+--
+-- WHAT THIS NEVER DOES:
+--   - DELETE, UPDATE, or TRUNCATE anything in `app_state`
+--   - overwrite any row already migrated (idempotent via the
+--     `legacy_player_id` tracking column below)
+--
+-- HOW TO USE:
+--   1. Run 001–006 against a STAGING project first.
+--   2. Run this script against staging, pointed at a COPY of the
+--      production app_state data (not production itself).
+--   3. Manually review every row flagged duplicate_review_status = 'flagged'.
+--   4. Only after that review passes, this script may be considered
+--      for a production run — as its own explicit, approved step,
+--      never bundled with "finish the build."
+-- ============================================================
+
+-- Tracking columns so re-running this script is idempotent and so every
+-- migrated row can be traced back to its exact source.
+alter table family add column if not exists legacy_family_label text;
+alter table player add column if not exists legacy_player_id text unique;
+alter table team add column if not exists legacy_team_id text unique;
+
+-- Example shape of the procedure (written as a reference script — run
+-- interactively or wrap in a one-off function; deliberately NOT written
+-- as an automatic trigger, so a human decides when this runs):
+--
+-- do $$
+-- declare
+--   legacy jsonb;
+--   t jsonb;
+--   p jsonb;
+--   v_season_id uuid;        -- set to the target season before running
+--   v_season_config_id uuid; -- set to that season's current config row
+--   v_division_id uuid;
+--   v_team_id uuid;
+--   v_family_id uuid;
+--   v_player_id uuid;
+-- begin
+--   select value into legacy from app_state where key = 'fremont-league-v1';
+--
+--   for t in select * from jsonb_array_elements(legacy)
+--   loop
+--     -- one division/team per legacy team entry
+--     insert into division (season_id, name, sport)
+--       values (v_season_id, t->>'division', 'football')
+--       on conflict do nothing
+--       returning id into v_division_id;
+--
+--     insert into team (division_id, name, legacy_team_id)
+--       values (v_division_id, t->>'name', t->>'id')
+--       on conflict (legacy_team_id) do nothing
+--       returning id into v_team_id;
+--
+--     for p in select * from jsonb_array_elements(t->'players')
+--     loop
+--       -- Family matching is a FREE-TEXT STRING in the legacy data
+--       -- ("family": "Llamas"). Do not auto-merge on this alone —
+--       -- flag for review whenever more than one legacy player maps
+--       -- to the same free-text label across different teams, since
+--       -- that string was never a real relational key.
+--       insert into family (display_name, legacy_family_label, duplicate_review_status)
+--         values (p->>'family', p->>'family', 'flagged')
+--         on conflict do nothing
+--         returning id into v_family_id;
+--
+--       insert into player (family_id, full_name, legacy_player_id)
+--         values (v_family_id, p->>'name', p->>'id')
+--         on conflict (legacy_player_id) do nothing
+--         returning id into v_player_id;
+--
+--       insert into player_season (player_id, season_id, team_id, season_config_id)
+--         values (v_player_id, v_season_id, v_team_id, v_season_config_id)
+--         on conflict (player_id, season_id) do nothing;
+--
+--       -- box-sale money → fundraising_cash_ledger, credit → fundraising_credit_ledger.
+--       -- sold/moneyIn/creditEarned are preserved bit-for-bit, not recomputed.
+--     end loop;
+--   end loop;
+-- end $$;
+--
+-- This is intentionally left as commented reference logic, not an
+-- executable block, because v_season_id/v_season_config_id must be
+-- filled in by a human for the actual target season before it runs.

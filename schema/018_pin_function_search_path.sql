@@ -1,0 +1,11 @@
+alter function auth_family_ids() set search_path = public, pg_temp;
+alter function auth_team_ids() set search_path = public, pg_temp;
+alter function auth_is_commissioner() set search_path = public, pg_temp;
+alter function auth_is_platform_owner() set search_path = public, pg_temp;
+alter function families_owing_hours(uuid) set search_path = public, pg_temp;
+alter function family_fundraising_summary(uuid, uuid) set search_path = public, pg_temp;
+alter function job_instance_coverage(uuid) set search_path = public, pg_temp;
+alter function player_season_readiness(uuid) set search_path = public, pg_temp;
+alter function season_closeout_summary(uuid) set search_path = public, pg_temp;
+alter function can_close_season(uuid) set search_path = public, pg_temp;
+alter function scan_for_possible_duplicate_players(uuid) set search_path = public, pg_temp;
